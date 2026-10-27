@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>말씀노트 · 기도제목 보내기</title>
+<meta name="description" content="이름을 고르고 기도제목을 써서 리더에게 보내 주세요">
+<meta property="og:type" content="website">
+<meta property="og:title" content="🙏 기도제목 보내기 · 말씀노트">
+<meta property="og:description" content="눌러서 내 이름 고르고 기도제목을 써 주세요">
+<meta property="og:image" content="https://stonson-boop.github.io/mn/og.png">
+<meta name="theme-color" content="#3d6a4f">
+<!--
+  말씀노트 · 기도제목 쓰기 페이지 (서버 없이 동작)
+  - 링크 ?p=코드 안에 [리더|셀|문자번호|셀가족 이름] 이 들어 있습니다. 서버에 아무것도 저장하지 않습니다.
+  - 셀 식구가 이름을 고르고 기도제목을 쓰면 → 카톡(공유) 또는 문자로 리더에게 1:1로 보냅니다.
+  - 리더는 받은 글을 길게 눌러 복사 → 말씀노트를 열면 셀 기도제목에 정리됩니다.
+-->
+<style>
+:root{--bg:#f4f6f3;--card:#fff;--ink:#1f2a23;--sub:#6b766e;--line:#dfe5df;--accent:#3d6a4f;--accent-ink:#fff;--soft:#e2ece5;--warn:#a2452f;--warn-soft:#fbe9e4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121815;--card:#1a221d;--ink:#e8eee9;--sub:#9aa69d;--line:#2c3830;--accent:#7db592;--accent-ink:#0f1a14;--soft:#22332a;--warn:#e48a72;--warn-soft:#3a221c}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:520px;margin:0 auto;padding:16px 16px 40px}
+.top{display:flex;align-items:center;gap:8px;margin:4px 0 14px}
+.top b{font-size:15px;color:var(--accent);letter-spacing:.02em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px 18px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--sub);font-size:14px;margin:0 0 18px;line-height:1.5}
+.lab{display:block;font-size:14px;color:var(--sub);margin:16px 0 8px}
+.names{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:44px;padding:0 16px;border-radius:22px;border:1px solid var(--line);background:var(--soft);color:var(--ink);font-size:16px;font-weight:600;cursor:pointer}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+input[type=text],textarea{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+textarea{min-height:140px;resize:vertical;line-height:1.55}
+input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.chk{display:flex;align-items:center;gap:10px;margin:12px 0 0;font-size:16px}
+.chk input{width:22px;height:22px;accent-color:var(--accent)}
+.chk.urg{color:var(--warn);font-weight:700}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.btn{flex:1 1 160px;min-height:52px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:17px;font-weight:600;cursor:pointer}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.note{color:var(--sub);font-size:13px;line-height:1.55;margin:12px 0 0}
+.done{display:none;margin-top:16px;background:var(--soft);border-radius:14px;padding:16px;font-size:15px;line-height:1.7}
+.done>b{display:block;font-size:17px;margin-bottom:4px}
+.done ol{margin:6px 0 0;padding-left:22px}
+.err{background:var(--warn-soft);color:var(--warn);border-radius:12px;padding:14px;font-size:15px;line-height:1.6}
+.app{display:block;text-align:center;margin:18px 0 0;color:var(--sub);font-size:14px}
+.app a{color:var(--accent);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><b>📖 말씀노트</b></div>
+  <div class="card" id="main"></div>
+  <p class="app" id="appLine"></p>
+</div>
+<script>
+/* ── 링크 풀기 (앱의 js/links.js 와 같은 방식: 한글 1글자 = 15비트) ── */
+const B64A="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+function unpackK(s){let b="";for(const ch of s){const v=B64A.indexOf(ch);if(v<0)break;b+=v.toString(2).padStart(6,"0")}
+ let o="",i=0;while(b.length-i>=9){if(b[i]==="0"){if(b.length-i<15)break;o+=String.fromCharCode(0xAC00+parseInt(b.slice(i+1,i+15),2));i+=15}
+ else if(b[i+1]==="0"){o+=String.fromCharCode(parseInt(b.slice(i+2,i+9),2));i+=9}
+ else{if(b.length-i<18)break;o+=String.fromCharCode(parseInt(b.slice(i+2,i+18),2));i+=18}}return o}
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $=s=>document.querySelector(s);
+const store={get(k){try{return localStorage.getItem(k)||""}catch(_){return""}},set(k,v){try{localStorage.setItem(k,v)}catch(_){}}};
+
+// 이번 주(일~토)
+function weekTitle(){const t=new Date();t.setDate(t.getDate()-t.getDay());
+ return `${t.getMonth()+1}월 ${["첫째","둘째","셋째","넷째","다섯째"][Math.ceil(t.getDate()/7)-1]} 주`}
+
+const code=(new URLSearchParams(location.search).get("p")||"").trim();
+let R=null;try{if(code){const a=unpackK(code).split("|");R={leader:a[0]||"",room:a[1]||"",phone:a[2]||"",names:(a[3]||"").split(",").filter(Boolean)}}}catch(_){R=null}
+const WEEK=weekTitle();
+
+function view(){
+ if(!R||!R.leader){$("#main").innerHTML=`<h1>기도제목 보내기</h1><div class="err">링크가 끝까지 복사되지 않은 것 같아요.<br>리더님이 보낸 카톡 글의 링크를 다시 눌러 주세요.</div>`;return}
+ const saved=store.get("mn_name"),who=R.names.includes(saved)?saved:(saved||"");
+ const fmtPhone=p=>p.replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3");
+ $("#main").innerHTML=`
+  <h1>기도제목 보내기</h1>
+  <p class="sub">${esc(R.room)} · ${WEEK} · 리더 <b>${esc(R.leader)}</b>님에게</p>
+  ${R.names.length?`<span class="lab">① 내 이름 고르기</span><div class="names">${R.names.map(n=>`<button type="button" class="chip${n===who?" on":""}" data-name="${esc(n)}">${esc(n)}</button>`).join("")}</div>`:""}
+  <label class="lab" for="who">${R.names.length?"이름 (목록에 없으면 직접 쓰기)":"① 내 이름"}</label>
+  <input type="text" id="who" maxlength="12" value="${esc(who)}" placeholder="이름" autocomplete="name">
+  <label class="lab" for="list">② 기도제목 <span style="font-size:13px">· 한 줄에 하나씩</span></label>
+  <textarea id="list" placeholder="예: 어머니 수술이 잘 되도록&#10;예: 새 직장에 잘 적응하도록"></textarea>
+  <label class="chk urg"><input type="checkbox" id="urg"> 🚨 긴급 기도</label>
+  <label class="chk"><input type="checkbox" id="priv"> 🔒 리더만 보기</label>
+  <div class="btns">
+   <button type="button" class="btn pri" id="sendK">카톡으로 리더에게</button>
+   ${R.phone?`<button type="button" class="btn" id="sendS">문자로 리더에게</button>`:""}
+  </div>
+  <p class="note">단톡방에는 보이지 않고 리더님에게만 갑니다.${R.phone?` (리더 번호 ${esc(fmtPhone(R.phone))})`:""}</p>
+  <div class="done" id="done"></div>`;
+ const intent=`intent://open?p=${code}#Intent;scheme=malsseumnote;package=com.harnesseng.malsseumnote;end`;
+ $("#appLine").innerHTML=/Android/i.test(navigator.userAgent)?`말씀노트 앱이 있으면 <a href="${intent}">앱에서 열기</a>`:"";
+}
+view();
+
+function message(){
+ const who=$("#who").value.trim(),list=$("#list").value.split("\n").map(s=>s.replace(/^[\s·•\-]+/,"").trim()).filter(Boolean);
+ if(!who){alertBox("이름을 골라 주세요");return null}
+ if(!list.length){alertBox("기도제목을 한 줄 이상 써 주세요");$("#list").focus();return null}
+ store.set("mn_name",who);
+ const urg=$("#urg").checked,priv=$("#priv").checked;
+ // ※ 이 모양 그대로여야 리더 앱이 알아봅니다 (js/links.js cwMessage 와 같음)
+ return `${urg?"🚨 긴급 기도 · ":"🙏 "}${who}님의 기도제목 · ${WEEK}\n${priv?"🔒 리더만 보기\n":""}${list.map(x=>"· "+x).join("\n")}\n\n(리더님: 이 글을 길게 눌러 복사 → 말씀노트를 열면 정리돼요)\n#말씀노트 기도제목`;
+}
+function alertBox(t){const d=$("#done");d.style.display="block";d.innerHTML=`<b>${esc(t)}</b>`;d.scrollIntoView({behavior:"smooth",block:"center"})}
+async function copy(t){
+ try{await navigator.clipboard.writeText(t);return true}catch(_){}
+ try{const a=document.createElement("textarea");a.value=t;a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();const ok=document.execCommand("copy");a.remove();return ok}catch(_){return false}
+}
+document.addEventListener("click",async e=>{
+ const c=e.target.closest("[data-name]");
+ if(c){document.querySelectorAll("[data-name]").forEach(b=>b.classList.toggle("on",b===c));$("#who").value=c.dataset.name;$("#list").focus();return}
+ if(e.target.closest("#sendK")){
+  const m=message();if(!m)return;
+  // 1) 공유 창이 되는 브라우저(크롬 등): 공유 창 → 카카오톡 → 리더 선택
+  if(navigator.share&&!/KAKAOTALK/i.test(navigator.userAgent)){try{await navigator.share({text:m});done(false);return}catch(err){if(err&&err.name==="AbortError")return}}
+  // 2) 카톡 안 브라우저: 글을 복사 → 리더 1:1 채팅방에 붙여넣기
+  const ok=await copy(m);done(true,ok,m);return}
+ if(e.target.closest("#sendS")){const m=message();if(!m)return;location.href=`sms:${R.phone}?body=${encodeURIComponent(m)}`;done(false);return}
+});
+function done(copied,ok,m){
+ const d=$("#done");d.style.display="block";
+ d.innerHTML=copied?(ok?`<b>✅ 기도제목이 복사됐어요</b>이제 리더님에게 붙여넣기만 하면 됩니다.<ol><li>왼쪽 위 <b>✕</b> 또는 뒤로 가기로 카톡으로 돌아가기</li><li><b>${esc(R.leader)}</b>님과의 1:1 채팅방 열기</li><li>입력칸을 <b>길게 눌러 [붙여넣기]</b> → 보내기</li></ol>`
+  :`<b>복사가 안 됐어요</b>아래 글을 길게 눌러 전체 복사한 뒤 ${esc(R.leader)}님에게 보내 주세요.<textarea readonly style="margin-top:8px;min-height:120px">${esc(m)}</textarea>`)
+  :`<b>✅ 보내기 창을 열었어요</b>${esc(R.leader)}님을 골라 보내면 끝입니다. 함께 기도할게요 🙏`;
+ d.scrollIntoView({behavior:"smooth",block:"center"});
+}
+</script>
+</body>
+</html>
